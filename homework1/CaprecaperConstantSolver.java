@@ -1,48 +1,52 @@
-  class CaprecaperConstantSolver {
-    public static int countK(int number) {
-        private static String generateDescendant(String str) {
-            StringBuilder descendant = new StringBuilder();
-            for (int i = 0; i < str.length() - 1; i++) {
-              int sum = (str.charAt(i) - '0') + (str.charAt(i + 1) - '0');
-              descendant.append(sum);
+public class PalindromSolver {
+
+    static boolean isPalindrome(int n) {
+        String s = "" + n;
+
+        if (s.length() % 2 == 0) {
+            for (int i = 0; i < s.length()/2; i++) {
+                if (s.charAt(i) != s.charAt(s.length()-i-1)) {
+                    return false;
+                }
             }
-            return descendant.toString();
-          }
-        
-          private static int countK(int number, int steps) {
-            if (number == 6174) {
-              return steps;
+        } else {
+            for (int i = 0; i < (s.length()-1)/2; i++) {
+                if (s.charAt(i) != s.charAt(s.length()-i-1)) {
+                    return false;
+                }
             }
-        
-            String numStr = String.format("%04d", number);
-            String ascending = sortDigits(numStr, true);
-            String descending = sortDigits(numStr, false);
-        
-            int larger = Integer.parseInt(descending);
-            int smaller = Integer.parseInt(ascending);
-        
-            int nextNumber = larger - smaller;
-        
-            return countK(nextNumber, steps + 1);
-          }
-        
-          private static String sortDigits(String str, boolean ascending) {
-            char[] chars = str.toCharArray();
-            java.util.Arrays.sort(chars);
-            return ascending
-                ? new String(chars)
-                : new StringBuilder(new String(chars)).reverse().toString();
-          }
-        
-          private static boolean hasSameDigits(int number) {
-            String numStr = String.valueOf(number);
-            char firstChar = numStr.charAt(0);
-            for (char c : numStr.toCharArray()) {
-              if (c != firstChar) {
-                return false;
-              }
-            }
+        }
+        return true;
+    }
+
+    public static boolean isPalindromeDescendant(int number) {
+        if (((int) Math.floor(Math.log10(number)) + 1) < 2) {
+            return false;
+        }
+
+        if (isPalindrome(number)) {
             return true;
-          }
+        }
+
+        String s = "" + number;
+        StringBuilder str = new StringBuilder(); 
+
+        if (s.length() % 2 == 1) {
+            for (int i = 0; i < s.length()-1; i+=2) {
+                addSum(str, s, i);
+            }
+
+            str.append(s.charAt(s.length()-1));
+        } else {
+            for (int i = 0; i < s.length(); i+=2) {
+                addSum(str, s, i);
+            }
+        }
+
+        return isPalindromeDescendant(Integer.parseInt(str.toString()));
+    }
+
+    static void addSum(StringBuilder str, String s, int i) {
+        str.append(Integer.parseInt ("" + s.charAt(i)) + Integer.parseInt ("" + s.charAt(i+1)));
     }
 }
