@@ -1,139 +1,94 @@
 import java.lang.annotation.*;
 import java.lang.reflect.*;
-import java.util.Random;
+import java.util.*;
 
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.PARAMETER)
-@interface NotNull {}
+public class RandomObjectGenerator {
 
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.PARAMETER)
-@interface Min {
-    int value();
-}
-
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.PARAMETER)
-@interface Max {
-    int value();
-}
-
-class RandomObjectGenerator {
-    private final Random random = new Random();
-
-    public <T> T nextObject(Class<T> clazz) {
-        return nextObject(clazz, null);
-    }
-
-    public <T> T nextObject(Class<T> clazz, String factoryMethodName) {
+    public <T> T nextObject(Class<T> clazz, String factoryMethodName) throws Exception {
         try {
-            if (factoryMethodName != null) {
-                for (Method method : clazz.getDeclaredMethods()) {
-                    if (Modifier.isStatic(method.getModifiers()) &&
-                        method.getName().equals(factoryMethodName)) {
-                        method.setAccessible(true);
-                        Object[] args = generateArguments(method);
-                        return clazz.cast(method.invoke(null, args));
-                    }
-                }
-                throw new IllegalArgumentException("No factory method found: " + factoryMethodName);
-            }
-
-            if (clazz.isRecord()) {
-                Constructor<?> constructor = clazz.getDeclaredConstructors()[0];
-                constructor.setAccessible(true);
-                Object[] args = generateArguments(constructor);
-                return clazz.cast(constructor.newInstance(args));
-            }
-
-            Constructor<T> ctor = clazz.getDeclaredConstructor();
-            ctor.setAccessible(true);
-            T instance = ctor.newInstance();
-            for (Field field : clazz.getDeclaredFields()) {
-                field.setAccessible(true);
-                field.set(instance, generateValue(field.getType()));
-            }
-            return instance;
-
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to generate object", e);
+            Method factoryMethod = clazz.getMethod(factoryMethodName);
+            return (T) factoryMethod.invoke(null);
+        } catch (NoSuchMethodException e) {
+            Constructor<T> constructor = findConstructor(clazz);
+            return constructor != null ? createObjectFromConstructor(constructor) : null;
         }
     }
 
-    private Object[] generateArguments(Executable executable) {
-        Parameter[] parameters = executable.getParameters();
-        Object[] args = new Object[parameters.length];
+    private <T> T createObjectFromConstructor(Constructor<T> constructor) throws Exception {
+        Parameter[] parameters = constructor.getParameters();
+        Object[] arguments = new Object[parameters.length];
 
         for (int i = 0; i < parameters.length; i++) {
-            Parameter param = parameters[i];
-            args[i] = generateValueWithAnnotations(param.getType(), param.getAnnotations());
+            arguments[i] = generateRandomValue(parameters[i]);
         }
 
-        return args;
+        return constructor.newInstance(arguments);
     }
 
-    private Object generateValueWithAnnotations(Class<?> type, Annotation[] annotations) {
-        Integer min = null;
-        Integer max = null;
-        boolean notNull = false;
+    private <T> Constructor<T> findConstructor(Class<T> clazz) {
+        for (Constructor<?> constructor : clazz.getConstructors()) {
+            if (constructor.getParameterCount() > 0) {
+                return (Constructor<T>) constructor;
+            }
+        }
+        return null;
+    }
 
-        for (Annotation annotation : annotations) {
-            if (annotation instanceof NotNull) notNull = true;
-            if (annotation instanceof Min) min = ((Min) annotation).value();
-            if (annotation instanceof Max) max = ((Max) annotation).value();
+    private Object generateRandomValue(Parameter parameter) {
+        Class<?> type = parameter.getType();
+
+        if (parameter.isAnnotationPresent(NotNull.class)) {
+            if (type.equals(String.class)) {
+                return "RandomString";
+            } else if (type.equals(int.class)) {
+                return 42;
+            } else if (type.equals(double.class)) {
+                return 3.14;
+            } else if (type.equals(boolean.class)) {
+                return true;
+            }
         }
 
-        if (!notNull && random.nextBoolean()) {
-            return null;
+        if (parameter.isAnnotationPresent(Min.class) || parameter.isAnnotationPresent(Max.class)) {
+            return handleMinMaxAnnotations(parameter);
         }
 
-        if (type == int.class || type == Integer.class) {
-            int lo = (min != null) ? min : 0;
-            int hi = (max != null) ? max : 100;
-            return lo + random.nextInt(hi - lo + 1);
-        }
-
-        if (type == String.class) {
-            return "str" + random.nextInt(1000);
+        if (type.equals(String.class)) {
+            return "RandomString";
+        } else if (type.equals(int.class)) {
+            return new Random().nextInt(100);
+        } else if (type.equals(double.class)) {
+            return new Random().nextDouble() * 100;
+        } else if (type.equals(boolean.class)) {
+            return new Random().nextBoolean();
         }
 
         return null;
     }
 
-    private Object generateValue(Class<?> type) {
-        return generateValueWithAnnotations(type, new Annotation[0]);
-    }
-}
+    private Object handleMinMaxAnnotations(Parameter parameter) {
+        Min minAnnotation = parameter.getAnnotation(Min.class);
+        Max maxAnnotation = parameter.getAnnotation(Max.class);
 
-record MyRecord(@NotNull String name, @Min(10) @Max(20) int age) {}
+        int min = minAnnotation != null ? minAnnotation.value() : 0;
+        int max = maxAnnotation != null ? maxAnnotation.value() : 100;
 
-class MyClass {
-    private final String name;
-    private final int age;
-
-    private MyClass(String name, int age) {
-        this.name = name;
-        this.age = age;
+        return new Random().nextInt(max - min + 1) + min;
     }
 
-    public static MyClass create(@NotNull String name, @Min(18) @Max(30) int age) {
-        return new MyClass(name, age);
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.PARAMETER)
+    public @interface NotNull {}
+
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.PARAMETER)
+    public @interface Min {
+        int value();
     }
 
-    @Override
-    public String toString() {
-        return "MyClass{name='" + name + "', age=" + age + "}";
-    }
-}
-
-public class Main {
-    public static void main(String[] args) {
-        RandomObjectGenerator rog = new RandomObjectGenerator();
-
-        MyRecord rec = rog.nextObject(MyRecord.class);
-        System.out.println("Generated record: " + rec);
-
-        MyClass obj = rog.nextObject(MyClass.class, "create");
-        System.out.println("Generated class:  " + obj);
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.PARAMETER)
+    public @interface Max {
+        int value();
     }
 }
